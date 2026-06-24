@@ -105,15 +105,19 @@ export default function InvoiceDetailPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          invoiceId: invoice.id,
-        }),
+        invoiceId: invoice.id,
+        amount: Number(invoice.amount),
+        name: invoice.clientName,
+        email: invoice.clientEmail,
+        projectName: invoice.projectName,
+      }),
       });
 
       const result = await response.json();
 
       if (!response.ok) {
         console.error(result);
-        alert(result.message || "Gagal membuat transaksi.");
+        alert(result.error || result.message || "Gagal membuat transaksi.");
         return;
       }
 
