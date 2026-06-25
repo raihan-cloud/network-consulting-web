@@ -20,17 +20,27 @@ export default function BookingSuccessPage() {
 
               <p>
                 Terima kasih. Tim NetPro akan meninjau kebutuhan Anda dan
-                menghubungi melalui WhatsApp atau email untuk konfirmasi jadwal,
-                layanan, dan estimasi biaya.
+                menghubungi melalui WhatsApp atau email untuk konfirmasi
+                jadwal, layanan, dan estimasi biaya.
               </p>
 
               <div className="success-modern-actions">
-                <Link href="/services" className="btn btn-outline-primary btn-lg">
+                <Link
+                  href="/services"
+                  className="btn btn-outline-primary btn-lg"
+                  aria-label="Lihat layanan"
+                >
+                  <i className="bi bi-grid me-2"></i>
                   Lihat Layanan
                 </Link>
 
-                <Link href="/" className="btn btn-warning btn-lg">
-                  Kembali ke Home
+                <Link
+                  href="/dashboard"
+                  className="btn btn-primary btn-lg"
+                  aria-label="Buka Dashboard Client"
+                >
+                  <i className="bi bi-speedometer2 me-2"></i>
+                  Buka Dashboard
                 </Link>
               </div>
             </div>
@@ -46,7 +56,9 @@ export default function BookingSuccessPage() {
                   <span></span>
                   <div>
                     <strong>Booking diterima</strong>
-                    <small>Permintaan Anda sudah masuk ke sistem.</small>
+                    <small>
+                      Permintaan Anda sudah masuk ke sistem.
+                    </small>
                   </div>
                 </div>
 
@@ -54,15 +66,19 @@ export default function BookingSuccessPage() {
                   <span></span>
                   <div>
                     <strong>Menunggu konfirmasi</strong>
-                    <small>Tim kami akan menghubungi Anda maksimal 1 x 24 jam.</small>
+                    <small>
+                      Tim kami akan menghubungi Anda maksimal 1 × 24 jam.
+                    </small>
                   </div>
                 </div>
 
                 <div className="success-timeline-item">
                   <span></span>
                   <div>
-                    <strong>Invoice / pembayaran</strong>
-                    <small>Payment link dibuat setelah layanan dikonfirmasi.</small>
+                    <strong>Invoice / Pembayaran</strong>
+                    <small>
+                      Payment link dibuat setelah layanan dikonfirmasi.
+                    </small>
                   </div>
                 </div>
               </div>
@@ -72,14 +88,17 @@ export default function BookingSuccessPage() {
                   <span>Status</span>
                   <strong>Pending</strong>
                 </div>
+
                 <div>
                   <span>Response</span>
-                  <strong>1 x 24 Jam</strong>
+                  <strong>1 × 24 Jam</strong>
                 </div>
+
                 <div>
                   <span>Payment</span>
                   <strong>Belum Dibuat</strong>
                 </div>
+
                 <div>
                   <span>Channel</span>
                   <strong>WhatsApp / Email</strong>
@@ -89,8 +108,8 @@ export default function BookingSuccessPage() {
               <div className="success-help-box">
                 <i className="bi bi-info-circle"></i>
                 <p>
-                  Simpan nomor booking ini. Nanti bisa dipakai untuk cek status
-                  booking ketika fitur dashboard client sudah tersedia.
+                  Simpan nomor booking ini. Anda dapat memantau status booking,
+                  invoice, dan progres layanan melalui Dashboard Client.
                 </p>
               </div>
             </aside>
