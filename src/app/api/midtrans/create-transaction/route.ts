@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
 
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,17 +12,31 @@ export async function POST(request: NextRequest) {
 
     if (!amount || amount <= 0) {
       return NextResponse.json(
-        { error: 'Amount tidak valid' },
+        { error: "Amount tidak valid" },
         { status: 400 }
       );
     }
 
-    const midtransClient = require('midtrans-client');
+    if (!process.env.MIDTRANS_SERVER_KEY) {
+      return NextResponse.json(
+        { error: "MIDTRANS_SERVER_KEY belum diatur" },
+        { status: 500 }
+      );
+    }
+
+    if (!process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY) {
+      return NextResponse.json(
+        { error: "NEXT_PUBLIC_MIDTRANS_CLIENT_KEY belum diatur" },
+        { status: 500 }
+      );
+    }
+
+    const midtransClient = require("midtrans-client");
 
     const snap = new midtransClient.Snap({
       isProduction: false,
-      serverKey: process.env.MIDTRANS_SERVER_KEY,
-      clientKey: process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY,
+      serverKey: process.env.MIDTRANS_SERVER_KEY.trim(),
+      clientKey: process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY.trim(),
     });
 
     const transaction = await snap.createTransaction({
@@ -31,8 +45,12 @@ export async function POST(request: NextRequest) {
         gross_amount: amount,
       },
       customer_details: {
-        first_name: body.name || 'Customer',
-        email: body.email || 'customer@example.com',
+        first_name: body.name || "Customer",
+        email: body.email || "customer@example.com",
+        phone: body.phone || "",
+      },
+      callbacks: {
+        finish: `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/dashboard/invoices`,
       },
     });
 
@@ -41,15 +59,15 @@ export async function POST(request: NextRequest) {
       token: transaction.token,
       redirect_url: transaction.redirect_url,
     });
-  } catch (error: unknown) {
-    console.error('Create transaction error:', error);
+  } catch (error: any) {
+    console.error("Create transaction error:", error);
 
     return NextResponse.json(
       {
         error:
-          error instanceof Error
-            ? error.message
-            : 'Terjadi kesalahan saat membuat transaksi',
+          error?.ApiResponse?.error_messages?.[0] ||
+          error?.message ||
+          "Terjadi kesalahan saat membuat transaksi",
       },
       { status: 500 }
     );
