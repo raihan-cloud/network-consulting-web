@@ -93,15 +93,17 @@ export default function AdminBookingsPage() {
       setUpdatingId(booking.id);
 
       await createProjectFromBooking({
-        bookingId: booking.id,
-        userId: booking.userId ?? null,
-        clientName: booking.name,
-        clientEmail: booking.email,
-        service: booking.service,
-        packageType: booking.packageType,
-        location: booking.location,
-        amount: booking.amount,
-      });
+      bookingId: booking.id,
+      userId: booking.userId ?? null,
+      clientName: booking.name,
+      clientEmail: booking.email,
+      clientPhone: booking.whatsapp,
+      whatsapp: booking.whatsapp,
+      service: booking.service,
+      packageType: booking.packageType,
+      location: booking.location,
+      amount: booking.amount,
+    });
 
       await updateBookingStatus(
         booking.id,

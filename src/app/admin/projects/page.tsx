@@ -1,19 +1,21 @@
 "use client";
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
+  addDoc,
   collection,
+  doc,
   getDocs,
   orderBy,
   query,
+  serverTimestamp,
+  updateDoc,
 } from "firebase/firestore";
 
 import { db } from "@/lib/firebase";
 import { createInvoice } from "@/lib/invoiceService";
-import {
-  updateProjectEngineer,
-  updateProjectProgress,
-} from "@/lib/projectService";
+import { updateProjectEngineer } from "@/lib/projectService";
 
 type ProjectStatus =
   | "planning"
@@ -27,6 +29,8 @@ type Project = {
   userId?: string | null;
   clientName: string;
   clientEmail: string;
+  clientPhone?: string;
+  whatsapp?: string;
   name: string;
   packageType: string;
   location: string;
@@ -34,35 +38,55 @@ type Project = {
   status: ProjectStatus;
   progress: number;
   engineer: string;
+  progressStage?: string;
+  lastUpdate?: string;
   createdAt?: any;
   updatedAt?: any;
 };
 
+const notifyProgress = [25, 50, 80, 100];
+
+const progressPresets = [
+  {
+    value: 25,
+    title: "Survey dan analisis kebutuhan",
+    note: "Survey lokasi selesai dan kebutuhan jaringan sudah dianalisis.",
+  },
+  {
+    value: 50,
+    title: "Instalasi dan konfigurasi awal",
+    note: "Instalasi perangkat dan konfigurasi awal sedang berjalan.",
+  },
+  {
+    value: 80,
+    title: "Testing jaringan dan optimasi",
+    note: "Testing koneksi dan optimasi jaringan sedang dilakukan.",
+  },
+  {
+    value: 100,
+    title: "Project selesai",
+    note: "Project telah selesai dan siap digunakan.",
+  },
+];
+
 export default function AdminProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [creatingInvoice, setCreatingInvoice] = useState<string | null>(null);
+  const [updatingProjectId, setUpdatingProjectId] = useState<string | null>(null);
 
-  const [creatingInvoice, setCreatingInvoice] =
-    useState<string | null>(null);
+  const [engineerValues, setEngineerValues] = useState<Record<string, string>>({});
 
-  const [updatingProjectId, setUpdatingProjectId] =
-    useState<string | null>(null);
-
-  const [progressValues, setProgressValues] =
-    useState<Record<string, number>>({});
-
-  const [engineerValues, setEngineerValues] =
-    useState<Record<string, string>>({});
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [modalProgress, setModalProgress] = useState(25);
+  const [modalStage, setModalStage] = useState("");
+  const [modalNote, setModalNote] = useState("");
 
   async function loadProjects() {
     try {
       setLoading(true);
 
-      const q = query(
-        collection(db, "projects"),
-        orderBy("createdAt", "desc")
-      );
-
+      const q = query(collection(db, "projects"), orderBy("createdAt", "desc"));
       const snapshot = await getDocs(q);
 
       const data = snapshot.docs.map((document) => ({
@@ -72,15 +96,11 @@ export default function AdminProjectsPage() {
 
       setProjects(data);
 
-      const progressMap: Record<string, number> = {};
       const engineerMap: Record<string, string> = {};
-
       data.forEach((project) => {
-        progressMap[project.id] = project.progress || 0;
         engineerMap[project.id] = project.engineer || "";
       });
 
-      setProgressValues(progressMap);
       setEngineerValues(engineerMap);
     } catch (error) {
       console.error("LOAD PROJECTS ERROR:", error);
@@ -101,26 +121,132 @@ export default function AdminProjectsPage() {
     return "pending";
   };
 
-  const handleUpdateProgress = async (project: Project) => {
-    const progress = Number(progressValues[project.id] || 0);
+  const openProgressModal = (project: Project) => {
+    const nearestPreset =
+      progressPresets.find((item) => item.value > (project.progress || 0)) ||
+      progressPresets[progressPresets.length - 1];
+
+    setSelectedProject(project);
+    setModalProgress(nearestPreset.value);
+    setModalStage(project.progressStage || nearestPreset.title);
+    setModalNote(project.lastUpdate || nearestPreset.note);
+  };
+
+  const closeProgressModal = () => {
+    setSelectedProject(null);
+    setModalProgress(25);
+    setModalStage("");
+    setModalNote("");
+  };
+
+  const handlePresetClick = (value: number) => {
+    const preset = progressPresets.find((item) => item.value === value);
+
+    setModalProgress(value);
+    setModalStage(preset?.title || "");
+    setModalNote(preset?.note || "");
+  };
+
+  const handleSaveProgress = async () => {
+    if (!selectedProject) return;
+
+    const progress = Number(modalProgress);
 
     if (progress < 0 || progress > 100) {
       alert("Progress harus antara 0 sampai 100.");
       return;
     }
 
-    try {
-      setUpdatingProjectId(project.id);
+    if (!modalStage.trim()) {
+      alert("Tahapan progress wajib diisi.");
+      return;
+    }
 
-      await updateProjectProgress(
-      project.id,
-      progress,
-      project.userId ?? null
-    );
+    if (!modalNote.trim()) {
+      alert("Catatan progress wajib diisi.");
+      return;
+    }
+
+    try {
+      setUpdatingProjectId(selectedProject.id);
+
+      const oldProgress = Number(selectedProject.progress || 0);
+
+      const newStatus: ProjectStatus =
+        progress >= 100
+          ? "completed"
+          : progress > 0
+          ? "implementation"
+          : "planning";
+
+      await updateDoc(doc(db, "projects", selectedProject.id), {
+        progress,
+        status: newStatus,
+        progressStage: modalStage,
+        lastUpdate: modalNote,
+        updatedAt: serverTimestamp(),
+      });
+
+      await addDoc(collection(db, "project_logs"), {
+        projectId: selectedProject.id,
+        userId: selectedProject.userId ?? null,
+        title: modalStage,
+        description: modalNote,
+        progress,
+        engineer: selectedProject.engineer || "-",
+        type: "progress",
+        createdAt: serverTimestamp(),
+      });
+
+      const phone = selectedProject.clientPhone || selectedProject.whatsapp;
+
+      if (phone && notifyProgress.includes(progress) && progress !== oldProgress) {
+        await fetch("/api/whatsapp/send", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            phone,
+            message: `🏗️ NetPro Operations Center
+
+Halo ${selectedProject.clientName},
+
+Progress project Anda telah diperbarui.
+
+━━━━━━━━━━━━━━━
+📁 Project
+${selectedProject.name}
+
+📈 Progress
+${progress}%
+
+📍 Tahapan
+${modalStage}
+
+👷 Engineer
+${selectedProject.engineer || "-"}
+
+📝 Catatan
+${modalNote}
+
+━━━━━━━━━━━━━━━
+Silakan login ke Dashboard Client untuk melihat detail progress terbaru.
+
+Terima kasih,
+NetPro Indonesia`,
+          }),
+        });
+      }
 
       await loadProjects();
+      closeProgressModal();
 
-      alert("Progress project berhasil diperbarui.");
+      alert(
+        phone && notifyProgress.includes(progress)
+          ? "Progress berhasil diperbarui dan WhatsApp dikirim."
+          : "Progress berhasil diperbarui."
+      );
     } catch (error) {
       console.error("UPDATE PROGRESS ERROR:", error);
       alert("Gagal update progress.");
@@ -140,11 +266,7 @@ export default function AdminProjectsPage() {
     try {
       setUpdatingProjectId(project.id);
 
-      await updateProjectEngineer(
-        project.id,
-        engineer,
-        project.userId ?? null
-      );
+      await updateProjectEngineer(project.id, engineer, project.userId ?? null);
 
       await loadProjects();
 
@@ -170,9 +292,7 @@ export default function AdminProjectsPage() {
         projectName: project.name,
         title: `Invoice - ${project.name}`,
         amount: project.amount,
-        dueDate: new Date(
-          Date.now() + 7 * 24 * 60 * 60 * 1000
-        )
+        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
           .toISOString()
           .split("T")[0],
       });
@@ -213,10 +333,7 @@ export default function AdminProjectsPage() {
       ) : (
         <div className="admin-project-board">
           {projects.map((project) => (
-            <article
-              className="admin-project-card"
-              key={project.id}
-            >
+            <article className="admin-project-card" key={project.id}>
               <div className="admin-project-card-top">
                 <div>
                   <small>#{project.id.slice(0, 8)}</small>
@@ -224,11 +341,7 @@ export default function AdminProjectsPage() {
                   <p>{project.clientName}</p>
                 </div>
 
-                <span
-                  className={`admin-status ${getStatusClass(
-                    project.status
-                  )}`}
-                >
+                <span className={`admin-status ${getStatusClass(project.status)}`}>
                   {project.status}
                 </span>
               </div>
@@ -240,11 +353,7 @@ export default function AdminProjectsPage() {
                 </div>
 
                 <div className="admin-progress">
-                  <div
-                    style={{
-                      width: `${project.progress || 0}%`,
-                    }}
-                  ></div>
+                  <div style={{ width: `${project.progress || 0}%` }}></div>
                 </div>
               </div>
 
@@ -260,32 +369,28 @@ export default function AdminProjectsPage() {
                 </div>
               </div>
 
-              <div className="admin-project-update-box">
-                <div>
-                  <label className="form-label">Progress</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    className="form-control form-control-sm"
-                    value={progressValues[project.id] ?? 0}
-                    onChange={(e) =>
-                      setProgressValues({
-                        ...progressValues,
-                        [project.id]: Number(e.target.value),
-                      })
-                    }
-                  />
-                </div>
+              {project.progressStage && (
+                <div className="admin-project-details mt-3">
+                  <div>
+                    <span>Tahapan</span>
+                    <strong>{project.progressStage}</strong>
+                  </div>
 
+                  <div>
+                    <span>Update</span>
+                    <strong>{project.lastUpdate || "-"}</strong>
+                  </div>
+                </div>
+              )}
+
+              <div className="admin-project-update-box">
                 <button
                   className="btn btn-outline-primary btn-sm"
                   disabled={updatingProjectId === project.id}
-                  onClick={() => handleUpdateProgress(project)}
+                  onClick={() => openProgressModal(project)}
                 >
-                  {updatingProjectId === project.id
-                    ? "Updating..."
-                    : "Update Progress"}
+                  <i className="bi bi-kanban me-2"></i>
+                  Update Progress
                 </button>
 
                 <div>
@@ -326,13 +431,90 @@ export default function AdminProjectsPage() {
                   disabled={creatingInvoice === project.id}
                   onClick={() => handleCreateInvoice(project)}
                 >
-                  {creatingInvoice === project.id
-                    ? "Creating..."
-                    : "Create Invoice"}
+                  {creatingInvoice === project.id ? "Creating..." : "Create Invoice"}
                 </button>
               </div>
             </article>
           ))}
+        </div>
+      )}
+
+      {selectedProject && (
+        <div className="progress-modal-backdrop">
+          <div className="progress-modal-card">
+            <div className="progress-modal-header">
+              <div>
+                <span>PROJECT PROGRESS</span>
+                <h2>Update Progress</h2>
+                <p>{selectedProject.name}</p>
+              </div>
+
+              <button onClick={closeProgressModal}>
+                <i className="bi bi-x-lg"></i>
+              </button>
+            </div>
+
+            <div className="progress-modal-presets">
+              {progressPresets.map((item) => (
+                <button
+                  key={item.value}
+                  className={modalProgress === item.value ? "active" : ""}
+                  onClick={() => handlePresetClick(item.value)}
+                >
+                  <strong>{item.value}%</strong>
+                  <span>{item.title}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="progress-modal-form">
+              <label>
+                Progress
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={modalProgress}
+                  onChange={(e) => setModalProgress(Number(e.target.value))}
+                />
+              </label>
+
+              <label>
+                Tahapan Pekerjaan
+                <input
+                  value={modalStage}
+                  onChange={(e) => setModalStage(e.target.value)}
+                  placeholder="Contoh: Instalasi router dan switch"
+                />
+              </label>
+
+              <label>
+                Catatan Engineer
+                <textarea
+                  rows={5}
+                  value={modalNote}
+                  onChange={(e) => setModalNote(e.target.value)}
+                  placeholder="Tuliskan detail pekerjaan yang sudah dilakukan..."
+                />
+              </label>
+            </div>
+
+            <div className="progress-modal-footer">
+              <button className="btn btn-light" onClick={closeProgressModal}>
+                Cancel
+              </button>
+
+              <button
+                className="btn btn-warning"
+                onClick={handleSaveProgress}
+                disabled={updatingProjectId === selectedProject.id}
+              >
+                {updatingProjectId === selectedProject.id
+                  ? "Saving..."
+                  : "Simpan Progress"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>

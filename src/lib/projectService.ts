@@ -21,6 +21,8 @@ export type ProjectPayload = {
   userId?: string | null;
   clientName: string;
   clientEmail: string;
+  clientPhone?: string;
+  whatsapp?: string;
   service: string;
   packageType: string;
   location: string;
@@ -28,17 +30,23 @@ export type ProjectPayload = {
 };
 
 export async function createProjectFromBooking(data: ProjectPayload) {
+  const phone = data.clientPhone || data.whatsapp || "";
+
   const docRef = await addDoc(collection(db, "projects"), {
     bookingId: data.bookingId,
     userId: data.userId ?? null,
     clientName: data.clientName,
     clientEmail: data.clientEmail,
+    clientPhone: phone,
+    whatsapp: phone,
     name: data.service,
     packageType: data.packageType,
     location: data.location,
     amount: data.amount,
     status: "planning",
     progress: 0,
+    progressStage: "Planning",
+    lastUpdate: "Project dibuat dan masuk tahap planning.",
     engineer: "-",
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),

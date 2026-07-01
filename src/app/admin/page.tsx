@@ -9,7 +9,19 @@ import {
   orderBy,
   query,
 } from "firebase/firestore";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 type Project = {
   id: string;
@@ -24,11 +36,18 @@ type DashboardStats = {
   pendingBookings: number;
   projects: number;
   activeProjects: number;
+  completedProjects: number;
+  planningProjects: number;
+  implementationProjects: number;
+  cancelledProjects: number;
   tickets: number;
   openTickets: number;
   invoices: number;
+  unpaidInvoices: number;
   paidRevenue: number;
   contacts: number;
+  consultations: number;
+  newConsultations: number;
 };
 
 export default function AdminDashboardPage() {
@@ -39,11 +58,18 @@ export default function AdminDashboardPage() {
     pendingBookings: 0,
     projects: 0,
     activeProjects: 0,
+    completedProjects: 0,
+    planningProjects: 0,
+    implementationProjects: 0,
+    cancelledProjects: 0,
     tickets: 0,
     openTickets: 0,
     invoices: 0,
+    unpaidInvoices: 0,
     paidRevenue: 0,
     contacts: 0,
+    consultations: 0,
+    newConsultations: 0,
   });
 
   async function loadDashboardData() {
@@ -56,12 +82,14 @@ export default function AdminDashboardPage() {
         ticketsSnap,
         invoicesSnap,
         contactsSnap,
+        consultationsSnap,
       ] = await Promise.all([
         getDocs(collection(db, "bookings")),
         getDocs(collection(db, "projects")),
         getDocs(collection(db, "tickets")),
         getDocs(collection(db, "invoices")),
         getDocs(collection(db, "contacts")),
+        getDocs(collection(db, "consultations")),
       ]);
 
       const bookings = bookingsSnap.docs.map((doc) => doc.data());
@@ -72,14 +100,30 @@ export default function AdminDashboardPage() {
 
       const tickets = ticketsSnap.docs.map((doc) => doc.data());
       const invoices = invoicesSnap.docs.map((doc) => doc.data());
+      const consultations = consultationsSnap.docs.map((doc) => doc.data());
 
       const paidRevenue = invoices
         .filter((invoice: any) => invoice.status === "paid")
         .reduce(
-          (total: number, invoice: any) =>
-            total + Number(invoice.amount || 0),
+          (total: number, invoice: any) => total + Number(invoice.amount || 0),
           0
         );
+
+      const planningProjects = projects.filter(
+        (item) => item.status === "planning"
+      ).length;
+
+      const implementationProjects = projects.filter(
+        (item) => item.status === "implementation"
+      ).length;
+
+      const completedProjects = projects.filter(
+        (item) => item.status === "completed"
+      ).length;
+
+      const cancelledProjects = projects.filter(
+        (item) => item.status === "cancelled"
+      ).length;
 
       setStats({
         bookings: bookingsSnap.size,
@@ -87,20 +131,26 @@ export default function AdminDashboardPage() {
           (item: any) => item.status === "pending"
         ).length,
         projects: projectsSnap.size,
-        activeProjects: projects.filter(
-          (item: any) =>
-            item.status === "planning" ||
-            item.status === "implementation"
-        ).length,
+        activeProjects: planningProjects + implementationProjects,
+        completedProjects,
+        planningProjects,
+        implementationProjects,
+        cancelledProjects,
         tickets: ticketsSnap.size,
         openTickets: tickets.filter(
           (item: any) =>
-            item.status === "open" ||
-            item.status === "in-progress"
+            item.status === "open" || item.status === "in-progress"
         ).length,
         invoices: invoicesSnap.size,
+        unpaidInvoices: invoices.filter(
+          (invoice: any) => invoice.status === "unpaid"
+        ).length,
         paidRevenue,
         contacts: contactsSnap.size,
+        consultations: consultationsSnap.size,
+        newConsultations: consultations.filter(
+          (item: any) => item.status === "New" || item.status === "new" || !item.status
+        ).length,
       });
 
       const recentProjectsQuery = query(
@@ -137,11 +187,16 @@ export default function AdminDashboardPage() {
     }).format(amount || 0);
   };
 
+  const completionRate = useMemo(() => {
+    if (stats.projects === 0) return 0;
+    return Math.round((stats.completedProjects / stats.projects) * 100);
+  }, [stats.projects, stats.completedProjects]);
+
   const statCards = [
     {
-      label: "Active Projects",
-      value: stats.activeProjects,
-      trend: `${stats.projects} total projects`,
+      label: "Total Projects",
+      value: stats.projects,
+      trend: `${stats.activeProjects} active projects`,
       icon: "bi-kanban",
     },
     {
@@ -151,10 +206,10 @@ export default function AdminDashboardPage() {
       icon: "bi-calendar-check",
     },
     {
-      label: "Open Tickets",
-      value: stats.openTickets,
-      trend: `${stats.tickets} total tickets`,
-      icon: "bi-headset",
+      label: "Consultations",
+      value: stats.newConsultations,
+      trend: `${stats.consultations} total consultations`,
+      icon: "bi-chat-square-text",
     },
     {
       label: "Paid Revenue",
@@ -164,29 +219,41 @@ export default function AdminDashboardPage() {
     },
   ];
 
+  const projectStatusData = [
+    { name: "Planning", value: stats.planningProjects },
+    { name: "Implementation", value: stats.implementationProjects },
+    { name: "Completed", value: stats.completedProjects },
+    { name: "Cancelled", value: stats.cancelledProjects },
+  ];
+
+  const businessChartData = [
+    { name: "Bookings", value: stats.bookings },
+    { name: "Consultations", value: stats.consultations },
+    { name: "Projects", value: stats.projects },
+    { name: "Invoices", value: stats.invoices },
+    { name: "Tickets", value: stats.tickets },
+  ];
+
   const healthCards = [
     {
-      label: "Project Health",
-      value:
-        stats.projects > 0
-          ? `${Math.round((stats.activeProjects / stats.projects) * 100)}%`
-          : "0%",
-      status: "Active workload",
+      label: "Completion Rate",
+      value: `${completionRate}%`,
+      status: "Completed project ratio",
+    },
+    {
+      label: "Open Tickets",
+      value: String(stats.openTickets),
+      status: `${stats.tickets} total support tickets`,
+    },
+    {
+      label: "Unpaid Invoices",
+      value: String(stats.unpaidInvoices),
+      status: "Need payment follow-up",
     },
     {
       label: "Lead Contacts",
       value: String(stats.contacts),
       status: "Public contact messages",
-    },
-    {
-      label: "Invoice Count",
-      value: String(stats.invoices),
-      status: "Billing records",
-    },
-    {
-      label: "Infrastructure Status",
-      value: "100%",
-      status: "Operational",
     },
   ];
 
@@ -197,7 +264,7 @@ export default function AdminDashboardPage() {
       <section className="admin-content">
         <div className="admin-page-header">
           <div>
-            <span>Realtime Overview</span>
+            <span>Business Analytics</span>
             <h1>Operations Dashboard</h1>
           </div>
 
@@ -241,35 +308,68 @@ export default function AdminDashboardPage() {
           <div className="admin-panel">
             <div className="admin-panel-header">
               <div>
-                <span>Operations Feed</span>
-                <h2>System summary</h2>
+                <span>Business Chart</span>
+                <h2>Operational summary</h2>
               </div>
             </div>
 
-            <div className="admin-activity-list">
-              <div className="admin-activity-item">
-                <span>1</span>
-                <p>
-                  {stats.pendingBookings} booking masih menunggu review admin.
-                </p>
-              </div>
+            <div className="admin-chart-box">
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={businessChartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="value" radius={[12, 12, 0, 0]} fill="#f59e0b" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
 
-              <div className="admin-activity-item">
-                <span>2</span>
-                <p>{stats.openTickets} support ticket masih aktif.</p>
+          <div className="admin-panel">
+            <div className="admin-panel-header">
+              <div>
+                <span>Project Analytics</span>
+                <h2>Status distribution</h2>
               </div>
+            </div>
 
-              <div className="admin-activity-item">
-                <span>3</span>
-                <p>
-                  Total pendapatan dari invoice paid adalah{" "}
-                  {formatCurrency(stats.paidRevenue)}.
-                </p>
-              </div>
+            <div className="admin-chart-box">
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Pie
+                    data={projectStatusData}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={62}
+                    outerRadius={90}
+                    paddingAngle={4}
+                  >
+                    {projectStatusData.map((_, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={
+                          ["#f59e0b", "#2563eb", "#10b981", "#ef4444"][index]
+                        }
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
 
-              <div className="admin-activity-item">
-                <span>4</span>
-                <p>{stats.contacts} pesan contact masuk dari website publik.</p>
+              <div className="admin-chart-legend">
+                {projectStatusData.map((item, index) => (
+                  <div key={item.name}>
+                    <span
+                      style={{
+                        background:
+                          ["#f59e0b", "#2563eb", "#10b981", "#ef4444"][index],
+                      }}
+                    ></span>
+                    {item.name}: {item.value}
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -310,6 +410,47 @@ export default function AdminDashboardPage() {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+
+          <div className="admin-panel">
+            <div className="admin-panel-header">
+              <div>
+                <span>Business Summary</span>
+                <h2>Operational insight</h2>
+              </div>
+            </div>
+
+            <div className="admin-activity-list">
+              <div className="admin-activity-item">
+                <span>1</span>
+                <p>
+                  {stats.pendingBookings} booking masih menunggu review admin.
+                </p>
+              </div>
+
+              <div className="admin-activity-item">
+                <span>2</span>
+                <p>
+                  {stats.newConsultations} konsultasi baru perlu ditindaklanjuti.
+                </p>
+              </div>
+
+              <div className="admin-activity-item">
+                <span>3</span>
+                <p>
+                  Total revenue paid saat ini adalah{" "}
+                  {formatCurrency(stats.paidRevenue)}.
+                </p>
+              </div>
+
+              <div className="admin-activity-item">
+                <span>4</span>
+                <p>
+                  Completion rate project mencapai {completionRate}% dari total{" "}
+                  {stats.projects} project.
+                </p>
+              </div>
             </div>
           </div>
         </div>

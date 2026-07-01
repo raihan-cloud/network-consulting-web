@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+
 import { services } from "@/data/services";
 import { createBooking } from "@/lib/bookingService";
 import { useAuth } from "@/context/AuthContext";
+import { db } from "@/lib/firebase";
 
 const packages = [
   {
@@ -61,8 +64,12 @@ export default function BookingPage() {
   const selectedPackageData =
     packages.find((item) => item.id === selectedPackage) || packages[1];
 
+  const isConsultation = selectedPackageData.id === "consultation";
+
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
   ) => {
     setForm({
       ...form,
@@ -78,6 +85,30 @@ export default function BookingPage() {
 
     try {
       setLoading(true);
+
+      if (isConsultation) {
+        await addDoc(collection(db, "consultations"), {
+          userId: user?.uid || null,
+          name: form.name,
+          email: form.email,
+          phone: form.whatsapp,
+          whatsapp: form.whatsapp,
+          company: form.company,
+          service: selectedServiceData.title,
+          packageType: selectedPackageData.name,
+          location: form.location,
+          budget: form.budget,
+          message: form.description,
+          description: form.description,
+          status: "New",
+          source: "booking-page",
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+
+        router.push("/consultation/success");
+        return;
+      }
 
       await createBooking({
         userId: user?.uid,
@@ -97,7 +128,11 @@ export default function BookingPage() {
       router.push("/booking/success");
     } catch (error) {
       console.error(error);
-      alert("Gagal membuat booking. Silakan coba lagi.");
+      alert(
+        isConsultation
+          ? "Gagal mengirim konsultasi. Silakan coba lagi."
+          : "Gagal membuat booking. Silakan coba lagi."
+      );
     } finally {
       setLoading(false);
     }
@@ -279,9 +314,15 @@ export default function BookingPage() {
 
             <aside className="checkout-summary">
               <div className="summary-card">
-                <span className="cf-eyebrow">Order Summary</span>
+                <span className="cf-eyebrow">
+                  {isConsultation ? "Consultation Summary" : "Order Summary"}
+                </span>
 
-                <h3>Ringkasan Booking</h3>
+                <h3>
+                  {isConsultation
+                    ? "Ringkasan Konsultasi"
+                    : "Ringkasan Booking"}
+                </h3>
 
                 <div className="summary-row">
                   <span>Layanan</span>
@@ -314,33 +355,42 @@ export default function BookingPage() {
                   disabled={loading}
                   className="btn btn-warning btn-lg w-100"
                 >
-                  {loading ? "Menyimpan Booking..." : "Buat Booking"}
+                  {loading
+                    ? isConsultation
+                      ? "Mengirim Konsultasi..."
+                      : "Menyimpan Booking..."
+                    : isConsultation
+                    ? "Kirim Konsultasi"
+                    : "Buat Booking"}
                 </button>
 
                 <p className="summary-note">
-                  Booking akan disimpan ke Firestore dengan status pending.
-                  Admin NetPro akan meninjau permintaan Anda.
+                  {isConsultation
+                    ? "Permintaan konsultasi akan masuk ke dashboard admin NetPro untuk ditinjau."
+                    : "Booking akan disimpan ke Firestore dengan status pending. Admin NetPro akan meninjau permintaan Anda."}
                 </p>
               </div>
 
-              <div className="payment-method-card">
-                <h4>Metode pembayaran nanti</h4>
+              {!isConsultation && (
+                <div className="payment-method-card">
+                  <h4>Metode pembayaran nanti</h4>
 
-                <div className="payment-method">
-                  <i className="bi bi-bank"></i>
-                  Transfer Bank
-                </div>
+                  <div className="payment-method">
+                    <i className="bi bi-bank"></i>
+                    Transfer Bank
+                  </div>
 
-                <div className="payment-method">
-                  <i className="bi bi-wallet2"></i>
-                  E-Wallet
-                </div>
+                  <div className="payment-method">
+                    <i className="bi bi-wallet2"></i>
+                    E-Wallet
+                  </div>
 
-                <div className="payment-method">
-                  <i className="bi bi-credit-card"></i>
-                  Virtual Account
+                  <div className="payment-method">
+                    <i className="bi bi-credit-card"></i>
+                    Virtual Account
+                  </div>
                 </div>
-              </div>
+              )}
             </aside>
           </div>
 

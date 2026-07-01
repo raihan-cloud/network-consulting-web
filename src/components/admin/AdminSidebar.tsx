@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { logoutUser } from "@/lib/authService";
 import { useAuth } from "@/context/AuthContext";
 
+
 const menuItems = [
   { label: "Overview", href: "/admin", icon: "bi-speedometer2" },
   { label: "Bookings", href: "/admin/bookings", icon: "bi-calendar-check" },
@@ -17,6 +18,8 @@ const menuItems = [
   { label: "Settings", href: "/admin/settings", icon: "bi-gear" },
   { label: "Contacts", href: "/admin/contacts", icon: "bi-envelope" },
   { label: "Notifications", href: "/admin/notifications", icon: "bi-bell" },
+  { label: "Consultations", href: "/admin/consultations", icon: "bi-chat-square-text" },
+  { label: "Engineers", href: "/admin/engineers", icon: "bi-person-workspace" },
 ];
 
 export default function AdminSidebar() {

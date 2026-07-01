@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import DashboardNavbar from "@/components/dashboard/DashboardNavbar";
 import { useEffect, useState } from "react";
 import {
@@ -19,6 +20,8 @@ type Project = {
   name: string;
   status: string;
   progress: number;
+  progressStage?: string;
+  lastUpdate?: string;
 };
 
 type NotificationItem = {
@@ -128,8 +131,7 @@ export default function DashboardPage() {
         ).length,
         supportTickets: ticketData.filter(
           (ticket) =>
-            ticket.status === "open" ||
-            ticket.status === "in-progress"
+            ticket.status === "open" || ticket.status === "in-progress"
         ).length,
       });
     } catch (error) {
@@ -279,6 +281,21 @@ export default function DashboardPage() {
                         }}
                       ></div>
                     </div>
+
+                    {project.progressStage && (
+                      <p className="client-project-stage">
+                        <i className="bi bi-check2-circle me-2"></i>
+                        {project.progressStage}
+                      </p>
+                    )}
+
+                    <Link
+                      href={`/dashboard/projects/${project.id}`}
+                      className="btn btn-outline-primary btn-sm w-100 mt-3"
+                    >
+                      View Progress
+                      <i className="bi bi-arrow-right ms-2"></i>
+                    </Link>
                   </div>
                 ))}
               </div>
